@@ -424,26 +424,17 @@ function renderStore(){
   const content = document.getElementById('content');
   content.innerHTML = `
     <div class="view-title"><h2>Весь магазин</h2><span class="tag store">Store</span></div>
-    <div class="view-sub">Сумма по всем позициям, 31 неделя (01.01–23.08)</div>
-    ${renderKPIs(WEEKS)}
+    <div class="view-sub">Выберите диапазон недель — плашки и таблица ниже пересчитаются под него</div>
+    <div class="period-controls">
+      <label>С <select id="periodFrom"></select></label>
+      <label>По <select id="periodTo"></select></label>
+      <button class="pr-apply" id="periodApply">Показать</button>
+    </div>
+    <div id="periodKpis"></div>
     ${chartsHTML('store')}
     <div class="card" style="padding-bottom:14px; margin-bottom:24px;">
-      <h3>Категории — текущая неделя (17.08–23.08)</h3>
+      <h3 id="periodTableTitle">Категории за период</h3>
       <div class="card-sub">клик по строке открывает карточку позиции</div>
-      <table id="catTable">
-        <thead><tr><th>Категория</th><th class="num">Кол-во</th><th class="num">Продажи, ₽</th><th class="num">Прибыль, ₽</th><th class="num">Маржа</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <div class="card" style="padding-bottom:14px; margin-bottom:24px;">
-      <h3>Продажи по позициям за выбранный период</h3>
-      <div class="card-sub">выберите диапазон недель — итоги и разбивка по позициям пересчитаются</div>
-      <div class="period-controls">
-        <label>С <select id="periodFrom"></select></label>
-        <label>По <select id="periodTo"></select></label>
-        <button class="pr-apply" id="periodApply">Показать</button>
-      </div>
-      <div id="periodKpis"></div>
       <table id="periodTable">
         <thead><tr><th>Категория</th><th class="num">Кол-во</th><th class="num">Продажи, ₽</th><th class="num">Прибыль, ₽</th><th class="num">Маржа</th></tr></thead>
         <tbody></tbody>
@@ -462,22 +453,6 @@ function renderStore(){
     </div>
   `;
   buildCharts('store', WEEKS);
-
-  const tbody = document.querySelector('#catTable tbody');
-  const sorted = [...CATS_LATEST].sort((a,b)=>b.sales-a.sales);
-  tbody.innerHTML = sorted.map(c=>{
-    const margin = c.sales>0 ? c.profit/c.sales : null;
-    const rowClass = c.sales===0 ? 'zero' : (c.profit<0 ? 'neg' : 'pos');
-    const clickable = PRODUCTS.series[c.name] ? 'clickable' : '';
-    return `<tr class="${rowClass} ${clickable}" data-name="${c.name}">
-      <td>${c.name}</td><td class="num">${c.qty||0}</td><td class="num">${fmt0(c.sales)}</td>
-      <td class="num profit">${fmt0(c.profit)}</td><td class="num">${margin===null?'—':pct1(margin)}</td>
-    </tr>`;
-  }).join('');
-  tbody.querySelectorAll('tr.clickable').forEach(tr=>{
-    tr.addEventListener('click', ()=> selectItem(tr.dataset.name));
-  });
-
   initPeriodRange();
 }
 
@@ -487,7 +462,7 @@ function initPeriodRange(){
   const opts = WEEKS.map((w,i)=>`<option value="${i}">${w.period}</option>`).join('');
   fromSel.innerHTML = opts;
   toSel.innerHTML = opts;
-  fromSel.value = 0;
+  fromSel.value = WEEKS.length-1;
   toSel.value = WEEKS.length-1;
   const run = ()=> updatePeriodRange(parseInt(fromSel.value), parseInt(toSel.value));
   document.getElementById('periodApply').addEventListener('click', run);
@@ -501,13 +476,15 @@ function updatePeriodRange(fromIdx, toIdx){
   const sales=sum('sales'), profit=sum('profit'), ads=sum('ads');
   const margin = sales? profit/sales : 0;
   const drr = sales? ads/sales : 0;
+  const label = fromIdx===toIdx ? WEEKS[fromIdx].period : `${WEEKS[fromIdx].period} — ${WEEKS[toIdx].period}`;
 
-  document.getElementById('periodKpis').innerHTML = `<div class="pr-kpis">
+  document.getElementById('periodKpis').innerHTML = `<div class="kpis">
     <div class="kpi"><div class="label">Продажи, ₽</div><div class="value num">${fmt0(sales)}</div></div>
     <div class="kpi"><div class="label">Прибыль, ₽</div><div class="value num">${fmt0(profit)}</div></div>
     <div class="kpi"><div class="label">Маржа</div><div class="value num">${pct1(margin)}</div></div>
     <div class="kpi"><div class="label">ДРР</div><div class="value num">${pct1(drr)}</div></div>
   </div>`;
+  document.getElementById('periodTableTitle').textContent = `Категории — ${label}`;
 
   const catsInRange = PRODUCTS.order.map(name=>{
     const rows = PRODUCTS.series[name].slice(fromIdx, toIdx+1);
