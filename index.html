@@ -168,6 +168,39 @@
   .ps-btn:hover{ background:rgba(232,221,201,0.1); color:var(--sand); }
   .ps-btn.active{ background:var(--sand); color:var(--bark); }
 
+  .rp{ position:relative; display:inline-block; font-family:Arial,sans-serif; }
+  .rp-btn{ display:inline-flex; align-items:center; gap:10px; font-family:Arial,sans-serif; font-size:13px; padding:7px 12px;
+    border:1px solid var(--line); border-radius:2px; background:#fff; color:var(--ink); cursor:pointer; }
+  .rp-btn:hover{ border-color:var(--oak); }
+  .rp-btn .rp-ico{ width:15px; height:15px; flex:none; color:var(--oak); }
+  .rp-btn .rp-n{ color:var(--muted); font-size:12px; }
+  .rp-pop{ position:absolute; z-index:50; top:calc(100% + 6px); left:0; background:#fff; border:1px solid var(--line);
+    box-shadow:0 8px 28px rgba(43,36,32,.16); border-radius:3px; padding:14px; display:none; width:max-content; }
+  .rp.right .rp-pop{ left:auto; right:0; }
+  .rp.open .rp-pop{ display:block; }
+  .rp-presets{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; max-width:520px; }
+  .rp-presets button{ font-family:Arial,sans-serif; font-size:11.5px; padding:5px 9px; border:1px solid var(--line); background:#faf6ee;
+    color:var(--bark-2); border-radius:2px; cursor:pointer; }
+  .rp-presets button:hover{ background:#ece4d2; }
+  .rp-months{ display:flex; gap:22px; }
+  .rp-month{ width:238px; }
+  .rp-mhead{ display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:700; color:var(--bark); margin-bottom:6px; height:26px; }
+  .rp-nav{ border:none; background:none; font-size:18px; color:var(--oak); cursor:pointer; width:26px; height:26px; border-radius:2px; }
+  .rp-nav:hover{ background:#f5f0e4; }
+  .rp-nav[disabled]{ visibility:hidden; }
+  .rp-grid{ display:grid; grid-template-columns:repeat(7,34px); row-gap:2px; }
+  .rp-dow{ font-size:10px; text-transform:uppercase; color:var(--muted); text-align:center; padding:4px 0; }
+  .rp-dow.we{ color:var(--rust); }
+  .rp-day{ height:32px; border:none; background:none; font-family:Arial,sans-serif; font-size:12.5px; color:var(--ink); cursor:pointer; }
+  .rp-day:hover{ background:#f5f0e4; }
+  .rp-day.off{ color:#cfc6b4; cursor:default; background:none; }
+  .rp-day.in{ background:#f3e2d9; }
+  .rp-day.edge{ background:var(--rust); color:#fff; font-weight:700; }
+  .rp-day.pend{ outline:2px solid var(--rust); outline-offset:-2px; }
+  .rp-foot{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:12px; font-size:12px; color:var(--muted); max-width:520px; }
+  .rp-foot .pr-apply{ font-family:Arial,sans-serif; font-size:12.5px; font-weight:700; color:#fff; background:var(--rust); border:none; padding:7px 16px; border-radius:2px; cursor:pointer; }
+  @media (max-width:640px){ .rp-month + .rp-month{ display:none; } .rp-pop{ left:auto; right:auto; } }
+
   .cmp-card{ background:#fff; border:1px solid var(--line); padding:16px 18px 18px; margin:0 0 18px; }
   .cmp-head{ display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; }
   .cmp-head h3{ margin:0; font-size:17px; font-weight:400; }
@@ -437,16 +470,102 @@ function buildCharts(prefix, rows){
   }));
 }
 
+// ---- Календарь выбора периода (неделя начинается с понедельника)
+const RP_YEAR = 2026;
+const RP_MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const rpD = s => { const [d,m]=s.split('.').map(Number); return new Date(RP_YEAR, m-1, d); };
+const rpFmt = d => String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0');
+const rpSame = (a,b) => a && b && a.getTime()===b.getTime();
+function rpBounds(periods){ return periods.map(p=>{ const [a,b]=p.period.split('-'); return {s:rpD(a), e:rpD(b)}; }); }
+function rpSnap(B, s, e){
+  let a = B.findIndex(x=>x.e>=s), b = -1;
+  for(let i=B.length-1;i>=0;i--){ if(B[i].s<=e){ b=i; break; } }
+  if(a<0) a=B.length-1; if(b<0) b=0; if(a>b) b=a;
+  return [a,b];
+}
+document.addEventListener('mousedown', e=>{
+  document.querySelectorAll('.rp.open').forEach(el=>{ if(!el.contains(e.target)) el.classList.remove('open'); });
+});
+function makeRangePicker(host, periods, a0, b0, onChange, alignRight){
+  const B = rpBounds(periods), MIN=B[0].s, MAX=B[B.length-1].e;
+  let A=a0, Bi=b0, pS=null, pE=null, hover=null, view=null;
+  host.innerHTML = `<div class="rp${alignRight?' right':''}">
+    <button type="button" class="rp-btn"><svg class="rp-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="11" rx="1"/><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"/></svg><span class="rp-lbl"></span><span class="rp-n"></span><span aria-hidden="true">▾</span></button>
+    <div class="rp-pop">
+      <div class="rp-presets"></div>
+      <div class="rp-months"></div>
+      <div class="rp-foot"><span class="rp-hint"></span><button type="button" class="pr-apply">Применить</button></div>
+    </div></div>`;
+  const root=host.querySelector('.rp'), btn=root.querySelector('.rp-btn'), months=root.querySelector('.rp-months'), hint=root.querySelector('.rp-hint');
+  const label=()=>{ root.querySelector('.rp-lbl').textContent = `${rpFmt(B[A].s)} — ${rpFmt(B[Bi].e)}.${RP_YEAR}`; root.querySelector('.rp-n').textContent = `· ${Bi-A+1} нед.`; };
+  const commit=(a,b)=>{ A=a; Bi=b; label(); root.classList.remove('open'); onChange(A,Bi); };
+  const presets=[
+    ['Последняя неделя', ()=>[B.length-1,B.length-1]],
+    ['2 недели', ()=>[Math.max(0,B.length-2),B.length-1]],
+    ['4 недели', ()=>[Math.max(0,B.length-4),B.length-1]],
+    ['Последний месяц', ()=>{ const e=MAX, s=new Date(e); s.setDate(s.getDate()-29); return rpSnap(B,s,e); }],
+    ['Квартал', ()=>{ const e=MAX, s=new Date(e); s.setDate(s.getDate()-90); return rpSnap(B,s,e); }],
+    ['С начала года', ()=>[0,B.length-1]],
+  ];
+  const pr=root.querySelector('.rp-presets');
+  presets.forEach(([t,f])=>{ const b=document.createElement('button'); b.type='button'; b.textContent=t; b.onclick=()=>{ const [a,c]=f(); commit(a,c); }; pr.appendChild(b); });
+  function monthHTML(y,m,first,last){
+    const d1=new Date(y,m,1), shift=(d1.getDay()+6)%7, days=new Date(y,m+1,0).getDate();
+    let h=`<div class="rp-month"><div class="rp-mhead"><button type="button" class="rp-nav" data-nav="-1" ${first?'':'style="visibility:hidden"'} ${new Date(y,m,1)<=MIN?'disabled':''}>‹</button><span>${RP_MONTHS[m]} ${y}</span><button type="button" class="rp-nav" data-nav="1" ${last?'':'style="visibility:hidden"'} ${new Date(y,m+1,1)>MAX?'disabled':''}>›</button></div><div class="rp-grid">`;
+    ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach((w,i)=>h+=`<div class="rp-dow${i>4?' we':''}">${w}</div>`);
+    for(let i=0;i<shift;i++) h+='<div></div>';
+    for(let d=1; d<=days; d++){
+      const dt=new Date(y,m,d), off = dt<MIN || dt>MAX;
+      h+=`<button type="button" class="rp-day${off?' off':''}" data-t="${dt.getTime()}" ${off?'disabled':''}>${d}</button>`;
+    }
+    return h+'</div></div>';
+  }
+  function paint(){
+    const s = pS || B[A].s, e = pS ? (pE || hover) : B[Bi].e;
+    const lo = e && e<s ? e : s, hi = e && e<s ? s : e;
+    months.querySelectorAll('.rp-day:not(.off)').forEach(el=>{
+      const dt=new Date(Number(el.dataset.t));
+      const edge=rpSame(dt,lo)||rpSame(dt,hi);
+      el.classList.toggle('edge', !!edge);
+      el.classList.toggle('in', !edge && !!hi && dt>lo && dt<hi);
+      el.classList.toggle('pend', !!(pS && !pE && rpSame(dt,pS)));
+    });
+  }
+  function draw(){
+    const y=view.getFullYear(), m=view.getMonth();
+    const prev=new Date(y,m-1,1);
+    months.innerHTML = monthHTML(prev.getFullYear(),prev.getMonth(),true,false)+monthHTML(y,m,false,true);
+    months.querySelectorAll('.rp-nav').forEach(n=>n.onclick=()=>{ view=new Date(view.getFullYear(), view.getMonth()+Number(n.dataset.nav), 1); draw(); });
+    months.querySelectorAll('.rp-day:not(.off)').forEach(el=>{
+      el.onclick=()=>{ const t=new Date(Number(el.dataset.t));
+        if(!pS || pE){ pS=t; pE=null; } else { pE=t; if(pE<pS){ [pS,pE]=[pE,pS]; } }
+        hover=null; updHint(); paint(); };
+      el.onmouseenter=()=>{ if(pS && !pE){ hover=new Date(Number(el.dataset.t)); paint(); } };
+    });
+    paint();
+  }
+  function updHint(){
+    if(pS && !pE){ hint.textContent='Выберите дату окончания'; return; }
+    if(pS && pE){ const [a,b]=rpSnap(B,pS,pE); hint.textContent=`Будут показаны недели ${rpFmt(B[a].s)} — ${rpFmt(B[b].e)} (${b-a+1} нед.)`; return; }
+    hint.textContent='Нажмите дату начала, затем дату окончания';
+  }
+  btn.onclick=()=>{
+    const open=!root.classList.contains('open');
+    document.querySelectorAll('.rp.open').forEach(el=>el.classList.remove('open'));
+    if(open){ pS=null; pE=null; hover=null; view=new Date(B[Bi].e.getFullYear(), B[Bi].e.getMonth(), 1); updHint(); draw(); root.classList.add('open'); }
+  };
+  root.querySelector('.rp-foot .pr-apply').onclick=()=>{
+    if(pS){ const [a,b]=rpSnap(B,pS,pE||pS); commit(a,b); } else root.classList.remove('open');
+  };
+  label(); onChange(A,Bi);
+}
+
 const WB_COLOR='#7b3fa0', OZ_COLOR='#c9861a';
 function compareHTML(prefix){
   return `<div class="cmp-card" id="${prefix}-cmp">
     <div class="cmp-head">
       <h3>Wildberries vs Ozon</h3>
-      <div class="period-controls">
-        <label>С <select id="${prefix}-cmpFrom"></select></label>
-        <label>По <select id="${prefix}-cmpTo"></select></label>
-        <button class="pr-apply" id="${prefix}-cmpApply">Показать</button>
-      </div>
+      <div class="period-controls"><div id="${prefix}-cmpRange"></div></div>
     </div>
     <div class="card-sub" id="${prefix}-cmpLabel"></div>
     <div class="cmp-wrap"><table class="cmp-table" id="${prefix}-cmpTable"></table></div>
@@ -459,13 +578,7 @@ function compareHTML(prefix){
 }
 let cmpCharts=[];
 function buildCompare(prefix, wbRows, ozRows){
-  const fromSel=document.getElementById(`${prefix}-cmpFrom`), toSel=document.getElementById(`${prefix}-cmpTo`);
-  const opts=wbRows.map((w,i)=>`<option value="${i}">${w.period}</option>`).join('');
-  fromSel.innerHTML=opts; toSel.innerHTML=opts;
-  fromSel.value=Math.max(0,wbRows.length-5); toSel.value=wbRows.length-1;
-  const run=()=>updateCompare(prefix, wbRows, ozRows, parseInt(fromSel.value), parseInt(toSel.value));
-  document.getElementById(`${prefix}-cmpApply`).addEventListener('click', run);
-  run();
+  makeRangePicker(document.getElementById(`${prefix}-cmpRange`), wbRows, Math.max(0,wbRows.length-5), wbRows.length-1, (a,b)=>updateCompare(prefix, wbRows, ozRows, a, b), true);
 }
 function aggr(rows){
   const s=f=>rows.reduce((a,r)=>a+(r[f]||0),0);
@@ -529,11 +642,7 @@ function renderStore(){
   content.innerHTML = `
     <div class="view-title"><h2>Весь магазин</h2><span class="tag store">Store</span></div>
     <div class="view-sub">Выберите диапазон недель — плашки и таблица ниже пересчитаются под него</div>
-    <div class="period-controls">
-      <label>С <select id="periodFrom"></select></label>
-      <label>По <select id="periodTo"></select></label>
-      <button class="pr-apply" id="periodApply">Показать</button>
-    </div>
+    <div class="period-controls"><div id="storeRange"></div></div>
     <div id="periodKpis"></div>
     ${compareHTML('store')}
     ${chartsHTML('store')}
@@ -563,16 +672,7 @@ function renderStore(){
 }
 
 function initPeriodRange(){
-  const fromSel = document.getElementById('periodFrom');
-  const toSel = document.getElementById('periodTo');
-  const opts = WEEKS.map((w,i)=>`<option value="${i}">${w.period}</option>`).join('');
-  fromSel.innerHTML = opts;
-  toSel.innerHTML = opts;
-  fromSel.value = WEEKS.length-1;
-  toSel.value = WEEKS.length-1;
-  const run = ()=> updatePeriodRange(parseInt(fromSel.value), parseInt(toSel.value));
-  document.getElementById('periodApply').addEventListener('click', run);
-  run();
+  makeRangePicker(document.getElementById('storeRange'), WEEKS, WEEKS.length-1, WEEKS.length-1, (a,b)=>updatePeriodRange(a,b));
 }
 
 function updatePeriodRange(fromIdx, toIdx){
