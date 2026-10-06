@@ -168,6 +168,34 @@
   .ps-btn:hover{ background:rgba(232,221,201,0.1); color:var(--sand); }
   .ps-btn.active{ background:var(--sand); color:var(--bark); }
 
+  .topbar{ position:sticky; top:0; z-index:40; display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 34px; margin:0 -34px 18px;
+    background:rgba(250,246,238,.96); border-bottom:1px solid var(--line); backdrop-filter:blur(4px); font-family:Arial,sans-serif; }
+  .topbar-l{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+  .topbar-h{ font-size:11.5px; color:var(--muted); }
+  .content{ padding-top:0 !important; }
+  .kpi-note{ font-family:Arial,sans-serif; font-size:11px; color:var(--muted); margin:-12px 0 18px; }
+  .pl-table{ min-width:760px; }
+  .pl-table th{ white-space:nowrap; }
+  .pl-table tr.th2 th{ font-size:9.5px; padding-top:0; }
+  .pl-table td.pct{ color:var(--muted); font-size:11.5px; }
+  .pl-table td.best{ font-weight:700; color:var(--ink); }
+  .pl-table tr.strong td{ font-weight:700; }
+  .pl-table tr.strong td.pct{ color:var(--bark-2); }
+  .pl-table tr.profit-row td{ border-top:2px solid var(--line); }
+  .pl-table tr.muted-row td{ color:var(--muted); font-size:12px; }
+  .pl-table tr.cogs-head{ cursor:pointer; }
+  .pl-table tr.cogs-head:hover{ background:#f5f0e4; }
+  .pl-table tr.cogs-head .caret{ display:inline-block; width:12px; color:var(--oak); }
+  .pl-table tr.sub td{ background:#fbf8f2; font-size:12px; padding-top:5px; padding-bottom:5px; }
+  .pl-table tr.sub td:first-child{ padding-left:28px; }
+  .pl-table tr.sub .sub-l{ display:block; color:var(--bark-2); }
+  .pl-table tr.sub .sub-h{ display:block; font-size:10.5px; color:var(--muted); }
+  .pl-table tr.hidden{ display:none; }
+  .share-lbl{ font-family:Arial,sans-serif; font-size:10.5px; color:var(--muted); margin-top:3px; }
+  .unit-note{ font-family:Arial,sans-serif; font-size:12px; color:#3a332b; background:#faf6ee; border:1px solid var(--line); padding:9px 12px; margin-top:12px; line-height:1.5; }
+  .unit-note span{ color:var(--muted); }
+  @media (max-width:880px){ .topbar{ padding:10px 16px; margin:0 -16px 14px; } }
+
   .rp{ position:relative; display:inline-block; font-family:Arial,sans-serif; }
   .rp-btn{ display:inline-flex; align-items:center; gap:10px; font-family:Arial,sans-serif; font-size:13px; padding:7px 12px;
     border:1px solid var(--line); border-radius:2px; background:#fff; color:var(--ink); cursor:pointer; }
@@ -249,7 +277,10 @@
     <div id="sbList"></div>
   </aside>
 
-  <main class="content" id="content"></main>
+  <main class="content">
+    <div class="topbar"><span class="topbar-l">Период</span><div id="topRange"></div><span class="topbar-h">все цифры, таблицы и графики ниже — за выбранный период</span></div>
+    <div id="content"></div>
+  </main>
 </div>
 
 <footer>
@@ -323,152 +354,8 @@ function computeCatsLatest(products){
   });
 }
 
-let CURRENT_PLATFORM = 'combined';
-let WEEKS = COMBINED_WEEKS;
-let PRODUCTS = COMBINED_PRODUCTS;
-let CATS_LATEST = computeCatsLatest(PRODUCTS);
-
-const fmt0 = n => Math.round(n).toLocaleString('ru-RU');
-const pct1 = n => (n*100).toLocaleString('ru-RU', {maximumFractionDigits:2, minimumFractionDigits:2}) + '%';
-
-Chart.defaults.font.family = "Arial, sans-serif";
-Chart.defaults.font.size = 10.5;
-Chart.defaults.color = '#5c5346';
-const inkGrid = { color:'#dcd0b6', drawTicks:false };
-
 let activeCharts = [];
-function destroyCharts(){ activeCharts.forEach(c=>c.destroy()); activeCharts = []; if(typeof cmpCharts!=='undefined'){ cmpCharts.forEach(c=>c.destroy()); cmpCharts=[]; } }
-
-function deltaHTML(curr, prevVal, isPct){
-  const diff = curr - prevVal;
-  const pctChange = prevVal !== 0 ? (diff/Math.abs(prevVal))*100 : 0;
-  const cls = diff > 0.0001 ? 'up' : (diff < -0.0001 ? 'down' : 'flat');
-  const arrow = diff > 0.0001 ? '▲' : (diff < -0.0001 ? '▼' : '·');
-  const text = isPct ? (diff>=0?'+':'') + (diff*100).toFixed(2) + ' п.п. н/н'
-                      : (pctChange>=0?'+':'') + pctChange.toFixed(1) + '% н/н';
-  return `<span class="delta ${cls}">${arrow} ${text}</span>`;
-}
-
-function renderKPIs(rows){
-  const last = rows[rows.length-1];
-  const prev = rows[rows.length-2] || last;
-  const margin = last.sales ? last.profit/last.sales : 0;
-  const marginPrev = prev.sales ? prev.profit/prev.sales : 0;
-  const drr = last.sales ? last.ads/last.sales : 0;
-  const drrPrev = prev.sales ? prev.ads/prev.sales : 0;
-  const kpis = [
-    {label:'Продажи, ₽', value: fmt0(last.sales), delta: deltaHTML(last.sales, prev.sales, false)},
-    {label:'Прибыль, ₽', value: fmt0(last.profit), delta: deltaHTML(last.profit, prev.profit, false)},
-    {label:'Маржа', value: pct1(margin), delta: deltaHTML(margin, marginPrev, true)},
-    {label:'ДРР (реклама/продажи)', value: pct1(drr), delta: deltaHTML(drr, drrPrev, true)},
-  ];
-  return `<div class="kpis">${kpis.map(k=>`
-    <div class="kpi">
-      <div class="label">${k.label}</div>
-      <div class="value num">${k.value}</div>
-      ${k.delta}
-    </div>`).join('')}</div>`;
-}
-
-function chartsHTML(prefix){
-  return `<div class="charts-grid">
-    <div class="card full">
-      <h3>Продажи и прибыль по неделям</h3>
-      <div class="card-sub">${WEEKS.length} периодов, ₽</div>
-      <canvas id="${prefix}-revprofit" height="70"></canvas>
-    </div>
-    <div class="card">
-      <h3>Маржа</h3>
-      <div class="card-sub">% от продаж по неделям</div>
-      <canvas id="${prefix}-margin" height="180"></canvas>
-    </div>
-    <div class="card">
-      <h3>Доля возвратов</h3>
-      <div class="card-sub">% от продаж по неделям</div>
-      <canvas id="${prefix}-returns" height="180"></canvas>
-    </div>
-    <div class="card full">
-      <h3>Структура затрат во времени</h3>
-      <div class="card-sub">комиссия / себестоимость / реклама / возвраты / прибыль, % от продаж</div>
-      <canvas id="${prefix}-cost" height="90"></canvas>
-    </div>
-    <div class="card full">
-      <h3>Количество проданных единиц</h3>
-      <div class="card-sub">шт в неделю</div>
-      <canvas id="${prefix}-qty" height="70"></canvas>
-    </div>
-  </div>`;
-}
-
-function buildCharts(prefix, rows){
-  const labels = rows.map(r=>r.period);
-
-  activeCharts.push(new Chart(document.getElementById(`${prefix}-revprofit`), {
-    type:'bar',
-    data:{ labels,
-      datasets:[
-        { type:'line', label:'Прибыль, ₽', data: rows.map(r=>r.profit), borderColor:'#b5502f', backgroundColor:'#b5502f', tension:.25, yAxisID:'y1', pointRadius:2, borderWidth:2, order:0 },
-        { label:'Продажи, ₽', data: rows.map(r=>r.sales), backgroundColor:'#c9bfa8', yAxisID:'y', order:1, borderRadius:1 }
-      ]},
-    options:{ responsive:true, interaction:{mode:'index', intersect:false},
-      scales:{
-        x:{ ticks:{maxRotation:70, minRotation:70, font:{size:9}}, grid:{display:false} },
-        y:{ position:'left', grid: inkGrid, ticks:{callback:v=>fmt0(v)} },
-        y1:{ position:'right', grid:{display:false}, ticks:{callback:v=>fmt0(v)} }
-      },
-      plugins:{ legend:{position:'top', align:'end'} }
-    }
-  }));
-
-  activeCharts.push(new Chart(document.getElementById(`${prefix}-margin`), {
-    type:'line',
-    data:{ labels,
-      datasets:[{ label:'Маржа, %', data: rows.map(r=> r.sales ? (r.profit/r.sales)*100 : 0),
-        borderColor:'#5f7053', backgroundColor:'rgba(95,112,83,0.12)', fill:true, tension:.25, pointRadius:1.5 }] },
-    options:{ responsive:true,
-      scales:{ x:{ ticks:{maxRotation:70, minRotation:70, font:{size:8}}, grid:{display:false} },
-        y:{ grid: inkGrid, ticks:{callback:v=>v+'%'} } },
-      plugins:{ legend:{display:false} } }
-  }));
-
-  activeCharts.push(new Chart(document.getElementById(`${prefix}-returns`), {
-    type:'line',
-    data:{ labels,
-      datasets:[{ label:'Возвраты, %', data: rows.map(r=> r.sales ? (r.returns/r.sales)*100 : 0),
-        borderColor:'#b5502f', backgroundColor:'rgba(181,80,47,0.12)', fill:true, tension:.25, pointRadius:1.5 }] },
-    options:{ responsive:true,
-      scales:{ x:{ ticks:{maxRotation:70, minRotation:70, font:{size:8}}, grid:{display:false} },
-        y:{ grid: inkGrid, ticks:{callback:v=>v+'%'}, beginAtZero:true } },
-      plugins:{ legend:{display:false} } }
-  }));
-
-  activeCharts.push(new Chart(document.getElementById(`${prefix}-cost`), {
-    type:'bar',
-    data:{ labels,
-      datasets:[
-        { label:'Комиссия', data: rows.map(r=> r.sales ? (r.komis/r.sales)*100 : 0), backgroundColor:'#5c4a37', stack:'s' },
-        { label:'Себестоимость', data: rows.map(r=> r.sales ? (r.cogs/r.sales)*100 : 0), backgroundColor:'#8a7f6c', stack:'s' },
-        { label:'Реклама', data: rows.map(r=> r.sales ? (r.ads/r.sales)*100 : 0), backgroundColor:'#b5502f', stack:'s' },
-        { label:'Возвраты', data: rows.map(r=> r.sales ? (r.returns/r.sales)*100 : 0), backgroundColor:'#d9a441', stack:'s' },
-        { label:'Прибыль', data: rows.map(r=> r.sales ? (r.profit/r.sales)*100 : 0), backgroundColor:'#7c8f6e', stack:'s' },
-      ]},
-    options:{ responsive:true,
-      scales:{ x:{ stacked:true, ticks:{maxRotation:70, minRotation:70, font:{size:8}}, grid:{display:false} },
-        y:{ stacked:true, grid: inkGrid, ticks:{callback:v=>v+'%'} } },
-      plugins:{ legend:{position:'bottom', labels:{boxWidth:10, font:{size:10}}} } }
-  }));
-
-  activeCharts.push(new Chart(document.getElementById(`${prefix}-qty`), {
-    type:'line',
-    data:{ labels,
-      datasets:[{ label:'Продано, шт', data: rows.map(r=>r.qty),
-        borderColor:'#5c4a37', backgroundColor:'rgba(92,74,55,0.10)', fill:true, tension:.3, pointRadius:2 }] },
-    options:{ responsive:true,
-      scales:{ x:{ ticks:{maxRotation:70, minRotation:70, font:{size:8}}, grid:{display:false} },
-        y:{ grid: inkGrid, beginAtZero:true } },
-      plugins:{ legend:{display:false} } }
-  }));
-}
+function destroyCharts(){ activeCharts.forEach(c=>c.destroy()); activeCharts = []; }
 
 // ---- Календарь выбора периода (неделя начинается с понедельника)
 const RP_YEAR = 2026;
@@ -560,208 +447,314 @@ function makeRangePicker(host, periods, a0, b0, onChange, alignRight){
   label(); onChange(A,Bi);
 }
 
+
+// ---- Состав себестоимости за 1 шт (карточки 1С «себестоимость август 2026»)
+// Итог по каждой категории равен ставке, по которой считается себестоимость в дашборде.
+const COST_PARTS = [
+  ['mat',  'Материалы и упаковка', 'фанера/заготовки, гвозди, масло, клей, мешок, коробка, этикетки'],
+  ['work', 'Работа', 'лазер, шлифовка, покраска, сборка, ОТК'],
+  ['log',  'Доставка до склада МП', 'по карточке 1С'],
+  ['brak', 'Брак готовой продукции', '2,5% к прямым затратам (только доски)'],
+];
+const COST_SPLIT = {
+  'Доска садху':              {mat:330.36, work:536.50, log:0,   brak:30.07, note:'среднее по 5 видам: 8 / 10 / 12 / 15 мм для ног и для спины'},
+  'Благовония':               {mat:73.25,  work:17,     log:0,   brak:0},
+  'Подставка для благовоний': {mat:40.42,  work:42,     log:0,   brak:0, note:'карточка «лодочка»'},
+  'Подставка под горячее':    {mat:55.61,  work:39,     log:0,   brak:0, note:'карточка «пазл»'},
+  'Мольберт':                 {mat:319.73, work:80,     log:200, brak:0},
+  'Подставки сковородки':     {mat:53.62,  work:39,     log:0,   brak:0},
+  'Подставки птички':         {mat:46.71,  work:52,     log:0,   brak:0, note:'карточка «круглые и квадратные»'},
+  'Подставки мандалы':        {mat:46.71,  work:52,     log:0,   brak:0, note:'карточка «круглые и квадратные»'},
+  'Подставки море':           {mat:46.71,  work:52,     log:0,   brak:0, note:'карточка «круглые и квадратные»'},
+  'Подставки лапки':          {mat:46.71,  work:52,     log:0,   brak:0, note:'карточка «круглые и квадратные»'},
+  'Браслеты':                 {mat:116.28, work:15,     log:0,   brak:0},
+  'Чехол':                    {mat:66.46,  work:12,     log:0,   brak:0},
+  'Панно':                    {mat:60.58,  work:22,     log:0,   brak:0, note:'карточка «доски для творчества»'},
+  'Заготовки':                {mat:60.58,  work:22,     log:0,   brak:0, note:'карточка «доски для творчества»'},
+  'Ключница':                 {mat:63.07,  work:50,     log:0,   brak:0},
+  'Столик':                   {mat:253,    work:80,     log:200, brak:0},
+  'Антиспетик':               {mat:88.87,  work:0,      log:0,   brak:0},
+};
+function splitCogs(cat, cogs){
+  const s = COST_SPLIT[cat]; const out = {mat:0, work:0, log:0, brak:0};
+  if(!s || !cogs){ out.mat = cogs||0; return out; }
+  const tot = s.mat + s.work + s.log + s.brak;
+  COST_PARTS.forEach(([k])=> out[k] = cogs * s[k] / tot);
+  return out;
+}
+
+const fmt0 = n => Math.round(n).toLocaleString('ru-RU');
+const fmt2 = n => n.toLocaleString('ru-RU', {minimumFractionDigits:2, maximumFractionDigits:2});
+const pct1 = n => (n*100).toLocaleString('ru-RU', {maximumFractionDigits:1, minimumFractionDigits:1}) + '%';
+
+Chart.defaults.font.family = "Arial, sans-serif";
+Chart.defaults.font.size = 10.5;
+Chart.defaults.color = '#5c5346';
+const inkGrid = { color:'#dcd0b6', drawTicks:false };
 const WB_COLOR='#7b3fa0', OZ_COLOR='#c9861a';
-function compareHTML(prefix){
-  return `<div class="cmp-card" id="${prefix}-cmp">
-    <div class="cmp-head">
-      <h3>Wildberries vs Ozon</h3>
-      <div class="period-controls"><div id="${prefix}-cmpRange"></div></div>
-    </div>
-    <div class="card-sub" id="${prefix}-cmpLabel"></div>
-    <div class="cmp-wrap"><table class="cmp-table" id="${prefix}-cmpTable"></table></div>
-    <div class="cmp-charts">
-      <div><h4>Продажи по неделям</h4><div class="card-sub">₽</div><canvas id="${prefix}-cmpSales" height="190"></canvas></div>
-      <div><h4>Количество по неделям</h4><div class="card-sub">шт</div><canvas id="${prefix}-cmpQty" height="190"></canvas></div>
-      <div><h4>Маржа по неделям</h4><div class="card-sub">% от продаж</div><canvas id="${prefix}-cmpMargin" height="190"></canvas></div>
-    </div>
+
+// ---- Глобальный период
+let SEL = null;              // {a, b} — индексы недель
+let selectedItemName = null;
+let CURRENT_PLATFORM = 'combined';
+let WEEKS = COMBINED_WEEKS;
+let PRODUCTS = COMBINED_PRODUCTS;
+
+function periodLabel(a,b){ return a===b ? WB_WEEKS[a].period : `${WB_WEEKS[a].period} — ${WB_WEEKS[b].period}`; }
+
+// сумма полей по категориям (и состав себестоимости) за [a..b]
+function aggrCats(P, cats, a, b){
+  const t = {qty:0,sales:0,komis:0,cogs:0,ads:0,returns:0,profit:0, mat:0,work:0,log:0,brak:0};
+  cats.forEach(c=>{
+    P.series[c].slice(a,b+1).forEach(w=>{
+      ['qty','sales','komis','cogs','ads','returns','profit'].forEach(f=> t[f]+= (w[f]||0));
+      const sp = splitCogs(c, w.cogs||0); COST_PARTS.forEach(([k])=> t[k]+= sp[k]);
+    });
+  });
+  return t;
+}
+function sumRows(rows){
+  const t={qty:0,sales:0,komis:0,cogs:0,ads:0,returns:0,profit:0};
+  rows.forEach(r=> Object.keys(t).forEach(f=> t[f]+= (r[f]||0)));
+  return t;
+}
+
+// ---- KPI за период + сравнение с предыдущим отрезком той же длины
+function deltaHTML(curr, prevVal, isPct){
+  const diff = curr - prevVal;
+  const pctChange = prevVal !== 0 ? (diff/Math.abs(prevVal))*100 : 0;
+  const cls = diff > 0.0001 ? 'up' : (diff < -0.0001 ? 'down' : 'flat');
+  const arrow = diff > 0.0001 ? '▲' : (diff < -0.0001 ? '▼' : '·');
+  const text = isPct ? (diff>=0?'+':'') + (diff*100).toFixed(1) + ' п.п.'
+                     : (pctChange>=0?'+':'') + pctChange.toFixed(1) + '%';
+  return `<span class="delta ${cls}">${arrow} ${text}</span>`;
+}
+function kpisHTML(rows, a, b){
+  const cur = sumRows(rows.slice(a,b+1));
+  const len = b-a+1, pa = a-len, pb = a-1;
+  const prev = pa>=0 ? sumRows(rows.slice(pa,pb+1)) : null;
+  const m = x=> x.sales? x.profit/x.sales : 0, d = x=> x.sales? x.ads/x.sales : 0;
+  const cmpNote = prev ? `<div class="kpi-note">к предыдущим ${len} нед. (${periodLabel(pa,pb)})</div>` : '';
+  const k = [
+    ['Продажи, ₽', fmt0(cur.sales), prev? deltaHTML(cur.sales, prev.sales,false):''],
+    ['Прибыль, ₽', fmt0(cur.profit), prev? deltaHTML(cur.profit, prev.profit,false):''],
+    ['Маржа', pct1(m(cur)), prev? deltaHTML(m(cur), m(prev), true):''],
+    ['ДРР (реклама/продажи)', pct1(d(cur)), prev? deltaHTML(d(cur), d(prev), true):''],
+  ];
+  return `<div class="kpis">${k.map(x=>`<div class="kpi"><div class="label">${x[0]}</div><div class="value num">${x[1]}</div>${x[2]}</div>`).join('')}</div>${cmpNote}`;
+}
+
+// ---- P&L за период: WB / Ozon / Итого, суммой и % от продаж
+let cogsOpen = true;
+function plHTML(cats, a, b, unitNote){
+  const W = aggrCats(WB_PRODUCTS, cats, a, b), O = aggrCats(OZON_PRODUCTS, cats, a, b);
+  const T = {}; Object.keys(W).forEach(k=> T[k] = W[k]+O[k]);
+  const pc = (x,base)=> base ? pct1(x/base) : '—';
+  const cell = (x, base, isPct=true)=> `<td class="num">${fmt0(x)}</td><td class="num pct">${isPct? pc(x,base):''}</td>`;
+  const share = (w,o)=>{ const tot=Math.max(w,0)+Math.max(o,0); if(!tot) return '<td></td>';
+    const pw=Math.round(Math.max(w,0)/tot*100);
+    return `<td><div class="share-bar" title="WB ${pw}% · Ozon ${100-pw}%"><span style="width:${pw}%;background:${WB_COLOR}"></span><span style="width:${100-pw}%;background:${OZ_COLOR}"></span></div><div class="share-lbl">WB ${pw}% · Ozon ${100-pw}%</div></td>`; };
+  const bestPct = (w,o,lowerBetter)=>{ // какой столбец выделить
+    if(!W.sales || !O.sales) return ['',''];
+    const wv=w/W.sales, ov=o/O.sales; if(Math.abs(wv-ov)<1e-6) return ['',''];
+    const wb = lowerBetter ? wv<ov : wv>ov; return wb? ['best',''] : ['','best']; };
+  const row = (label, key, opts={})=>{
+    const [bw,bo] = opts.best ? bestPct(W[key],O[key],opts.best==='low') : ['',''];
+    return `<tr class="${opts.cls||''}"><td>${label}</td>
+      <td class="num ${bw}">${fmt0(W[key])}</td><td class="num pct ${bw}">${pc(W[key],W.sales)}</td>
+      <td class="num ${bo}">${fmt0(O[key])}</td><td class="num pct ${bo}">${pc(O[key],O.sales)}</td>
+      <td class="num">${fmt0(T[key])}</td><td class="num pct">${pc(T[key],T.sales)}</td>
+      ${opts.share? share(W[key],O[key]) : '<td></td>'}</tr>`; };
+  const perUnit = (x)=> x.qty ? fmt0(x.profit/x.qty) : '—';
+  const avg = (x)=> x.qty ? fmt0(x.sales/x.qty) : '—';
+  const sub = COST_PARTS.filter(([k])=> T[k]>0.5).map(([k,lab,hint])=>
+    `<tr class="sub cogs-sub${cogsOpen?'':' hidden'}"><td><span class="sub-l">${lab}</span><span class="sub-h">${hint}</span></td>
+      <td class="num">${fmt0(W[k])}</td><td class="num pct">${pc(W[k],W.sales)}</td>
+      <td class="num">${fmt0(O[k])}</td><td class="num pct">${pc(O[k],O.sales)}</td>
+      <td class="num">${fmt0(T[k])}</td><td class="num pct">${pc(T[k],T.sales)}</td><td class="num pct">${T.cogs? pct1(T[k]/T.cogs)+' с/с':''}</td></tr>`).join('');
+  return `
+    <table class="pl-table">
+      <thead><tr><th>Показатель</th>
+        <th class="num" colspan="2"><span class="sw wb"></span>Wildberries</th>
+        <th class="num" colspan="2"><span class="sw oz"></span>Ozon</th>
+        <th class="num" colspan="2">Итого</th><th>Доля WB / Ozon</th></tr>
+        <tr class="th2"><th></th><th class="num">₽</th><th class="num">% продаж</th><th class="num">₽</th><th class="num">% продаж</th><th class="num">₽</th><th class="num">% продаж</th><th></th></tr></thead>
+      <tbody>
+        <tr><td>Продано, шт</td><td class="num">${fmt0(W.qty)}</td><td></td><td class="num">${fmt0(O.qty)}</td><td></td><td class="num">${fmt0(T.qty)}</td><td></td>${share(W.qty,O.qty)}</tr>
+        ${row('Продажи', 'sales', {cls:'strong', share:true})}
+        <tr class="muted-row"><td>Средний чек, ₽/шт</td><td class="num">${avg(W)}</td><td></td><td class="num">${avg(O)}</td><td></td><td class="num">${avg(T)}</td><td></td><td></td></tr>
+        ${row('Комиссия и логистика МП', 'komis', {best:'low'})}
+        <tr class="cogs-head" id="cogsToggle"><td><span class="caret">${cogsOpen?'▾':'▸'}</span> Себестоимость</td>
+          <td class="num">${fmt0(W.cogs)}</td><td class="num pct">${pc(W.cogs,W.sales)}</td>
+          <td class="num">${fmt0(O.cogs)}</td><td class="num pct">${pc(O.cogs,O.sales)}</td>
+          <td class="num">${fmt0(T.cogs)}</td><td class="num pct">${pc(T.cogs,T.sales)}</td><td class="share-lbl">доля в с/с ↓</td></tr>
+        ${sub}
+        ${row('Реклама', 'ads', {best:'low'})}
+        ${row('Прибыль', 'profit', {cls:'strong profit-row', best:'high', share:true})}
+        <tr class="muted-row"><td>Прибыль на 1 шт, ₽</td><td class="num">${perUnit(W)}</td><td></td><td class="num">${perUnit(O)}</td><td></td><td class="num">${perUnit(T)}</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    ${unitNote||''}`;
+}
+function bindCogsToggle(){
+  const t = document.getElementById('cogsToggle'); if(!t) return;
+  t.addEventListener('click', ()=>{ cogsOpen=!cogsOpen;
+    document.querySelectorAll('.cogs-sub').forEach(r=> r.classList.toggle('hidden', !cogsOpen));
+    t.querySelector('.caret').textContent = cogsOpen?'▾':'▸'; });
+}
+function unitNoteHTML(cat){
+  const s = COST_SPLIT[cat]; if(!s) return '';
+  const tot = s.mat+s.work+s.log+s.brak; if(!tot) return '';
+  // ставка, по которой реально посчитана себестоимость в данных (за выбранный период)
+  const t = aggrCats(WB_PRODUCTS,[cat],SEL.a,SEL.b), o = aggrCats(OZON_PRODUCTS,[cat],SEL.a,SEL.b);
+  const q = t.qty+o.qty, rate = q>0 ? (t.cogs+o.cogs)/q : tot;
+  const k = rate/tot;
+  const parts = COST_PARTS.filter(([key])=> s[key]>0).map(([key,lab])=> `${lab.toLowerCase()} ${fmt2(s[key]*k)}`).join(' + ');
+  const diff = Math.abs(rate-tot)>0.5 ? ` В карточке 1С сейчас ${fmt2(tot)} ₽ — в расчёте оставлена прежняя ставка, состав разнесён пропорционально.` : '';
+  return `<div class="unit-note"><b>Себестоимость 1 шт: ${fmt2(rate)} ₽</b> = ${parts}${s.note? ` <span>(${s.note})</span>`:''}.${diff} Налоги, зарплата офиса, аренда и продвижение в карточках 1С не заполнены — в себестоимость не входят.</div>`;
+}
+
+// ---- Графики (по выбранному периоду)
+function chartsHTML(prefix, n){
+  return `<div class="charts-grid">
+    <div class="card full"><h3>Продажи и прибыль по неделям</h3><div class="card-sub">${n} нед., ₽</div><canvas id="${prefix}-revprofit" height="70"></canvas></div>
+    <div class="card"><h3>Маржа</h3><div class="card-sub">% от продаж по неделям</div><canvas id="${prefix}-margin" height="180"></canvas></div>
+    <div class="card"><h3>Продано, шт</h3><div class="card-sub">единиц в неделю</div><canvas id="${prefix}-qty" height="180"></canvas></div>
+    <div class="card full"><h3>Структура затрат по неделям</h3><div class="card-sub">комиссия и логистика / себестоимость / реклама / прибыль, % от продаж</div><canvas id="${prefix}-cost" height="90"></canvas></div>
   </div>`;
 }
-let cmpCharts=[];
-function buildCompare(prefix, wbRows, ozRows){
-  makeRangePicker(document.getElementById(`${prefix}-cmpRange`), wbRows, Math.max(0,wbRows.length-5), wbRows.length-1, (a,b)=>updateCompare(prefix, wbRows, ozRows, a, b), true);
+const xTicks = {maxRotation:70, minRotation:45, font:{size:8.5}};
+function buildCharts(prefix, rows){
+  const labels = rows.map(r=>r.period);
+  activeCharts.push(new Chart(document.getElementById(`${prefix}-revprofit`), { type:'bar',
+    data:{ labels, datasets:[
+      { type:'line', label:'Прибыль, ₽', data: rows.map(r=>r.profit), borderColor:'#b5502f', backgroundColor:'#b5502f', tension:.25, pointRadius:3, borderWidth:2, order:0 },
+      { label:'Продажи, ₽', data: rows.map(r=>r.sales), backgroundColor:'#c9bfa8', order:1, borderRadius:2 } ]},
+    options:{ responsive:true, interaction:{mode:'index', intersect:false},
+      scales:{ x:{ ticks:xTicks, grid:{display:false} }, y:{ grid: inkGrid, ticks:{callback:v=>fmt0(v)} } },
+      plugins:{ legend:{position:'top', align:'end'}, tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt0(c.parsed.y)}`}} } } }));
+  activeCharts.push(new Chart(document.getElementById(`${prefix}-margin`), { type:'line',
+    data:{ labels, datasets:[{ label:'Маржа, %', data: rows.map(r=> r.sales ? (r.profit/r.sales)*100 : null),
+      borderColor:'#5f7053', backgroundColor:'rgba(95,112,83,0.12)', fill:true, tension:.25, pointRadius:3 }] },
+    options:{ responsive:true, scales:{ x:{ ticks:xTicks, grid:{display:false} }, y:{ grid: inkGrid, ticks:{callback:v=>v+'%'} } },
+      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>`Маржа: ${c.parsed.y.toFixed(1)}%`}} } } }));
+  activeCharts.push(new Chart(document.getElementById(`${prefix}-qty`), { type:'line',
+    data:{ labels, datasets:[{ label:'Продано, шт', data: rows.map(r=>r.qty), borderColor:'#5c4a37', backgroundColor:'rgba(92,74,55,0.10)', fill:true, tension:.3, pointRadius:3 }] },
+    options:{ responsive:true, scales:{ x:{ ticks:xTicks, grid:{display:false} }, y:{ grid: inkGrid, beginAtZero:true } }, plugins:{ legend:{display:false} } } }));
+  const pc = f => rows.map(r=> r.sales ? (r[f]/r.sales)*100 : 0);
+  activeCharts.push(new Chart(document.getElementById(`${prefix}-cost`), { type:'bar',
+    data:{ labels, datasets:[
+      { label:'Комиссия и логистика', data: pc('komis'), backgroundColor:'#5c4a37', stack:'s' },
+      { label:'Себестоимость', data: pc('cogs'), backgroundColor:'#8a7f6c', stack:'s' },
+      { label:'Реклама', data: pc('ads'), backgroundColor:'#b5502f', stack:'s' },
+      { label:'Прибыль', data: pc('profit'), backgroundColor:'#7c8f6e', stack:'s' } ]},
+    options:{ responsive:true, scales:{ x:{ stacked:true, ticks:xTicks, grid:{display:false} }, y:{ stacked:true, grid: inkGrid, ticks:{callback:v=>v+'%'} } },
+      plugins:{ legend:{position:'bottom', labels:{boxWidth:10, font:{size:10}}}, tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)}%`}} } } }));
 }
-function aggr(rows){
-  const s=f=>rows.reduce((a,r)=>a+(r[f]||0),0);
-  return {qty:s('qty'),sales:s('sales'),komis:s('komis'),cogs:s('cogs'),ads:s('ads'),returns:s('returns'),profit:s('profit')};
+function cmpChartsHTML(prefix){
+  return `<div class="cmp-charts">
+    <div><h4>Продажи по неделям</h4><div class="card-sub">₽</div><canvas id="${prefix}-cmpSales" height="190"></canvas></div>
+    <div><h4>Продано по неделям</h4><div class="card-sub">шт</div><canvas id="${prefix}-cmpQty" height="190"></canvas></div>
+    <div><h4>Маржа по неделям</h4><div class="card-sub">% от продаж</div><canvas id="${prefix}-cmpMargin" height="190"></canvas></div>
+  </div>`;
 }
-function updateCompare(prefix, wbRows, ozRows, a, b){
-  if(a>b) [a,b]=[b,a];
-  const W=aggr(wbRows.slice(a,b+1)), O=aggr(ozRows.slice(a,b+1));
-  const T={}; Object.keys(W).forEach(k=>T[k]=W[k]+O[k]);
-  const label = a===b ? wbRows[a].period : `${wbRows[a].period} — ${wbRows[b].period}`;
-  document.getElementById(`${prefix}-cmpLabel`).textContent = `Период: ${label} · ${b-a+1} нед.`;
-  const div=(x,y)=>y?x/y:null;
-  const P=v=>v===null?'—':pct1(v), R=v=>v===null?'—':fmt0(v);
-  // metric: label, fn, formatter, higherIsBetter (null = no highlight)
-  const M=[
-    ['Продано, шт', x=>x.qty, v=>fmt0(v), null, true],
-    ['Продажи, ₽', x=>x.sales, R, null, true],
-    ['Средний чек, ₽/шт', x=>div(x.sales,x.qty), R, null],
-    ['Комиссия и логистика', x=>div(x.komis,x.sales), P, false],
-    ['Себестоимость', x=>div(x.cogs,x.sales), P, false],
-    ['ДРР (реклама)', x=>div(x.ads,x.sales), P, false],
-    ['Реклама, ₽', x=>x.ads, R, null],
-    ['Прибыль, ₽', x=>x.profit, R, null, true],
-    ['Прибыль на 1 шт, ₽', x=>div(x.profit,x.qty), R, true],
-    ['Маржа', x=>div(x.profit,x.sales), P, true],
-  ];
-  const rows=M.map(([lab,fn,f,hib,share])=>{
-    const w=fn(W), o=fn(O), t=fn(T);
-    let bw='',bo='';
-    if(hib!==null && hib!==undefined && w!==null && o!==null && W.sales && O.sales && Math.abs(w-o)>1e-9){
-      const wbBetter = hib ? w>o : w<o; bw=wbBetter?'best':''; bo=wbBetter?'':'best';
-    }
-    let sh='';
-    if(share){ const tot=(w>0?w:0)+(o>0?o:0); const pw=tot?Math.round((w>0?w:0)/tot*100):0;
-      sh = tot? `<div class="share-bar" title="WB ${pw}% · Ozon ${100-pw}%"><span style="width:${pw}%;background:${WB_COLOR}"></span><span style="width:${100-pw}%;background:${OZ_COLOR}"></span></div><div style="font-size:10.5px;color:var(--muted);margin-top:3px">WB ${pw}% · Ozon ${100-pw}%</div>` : '—'; }
-    return `<tr><td>${lab}</td><td class="num ${bw}">${f(w)}</td><td class="num ${bo}">${f(o)}</td><td class="num">${f(t)}</td><td>${sh}</td></tr>`;
-  }).join('');
-  document.getElementById(`${prefix}-cmpTable`).innerHTML =
-    `<thead><tr><th>Показатель</th><th class="num wb"><span class="sw wb"></span>Wildberries</th><th class="num oz"><span class="sw oz"></span>Ozon</th><th class="num">Итого</th><th>Доля WB / Ozon</th></tr></thead><tbody>${rows}</tbody>`;
-  // charts over selected range
-  cmpCharts.forEach(c=>c.destroy()); cmpCharts=[];
-  const ws=wbRows.slice(a,b+1), os=ozRows.slice(a,b+1), labels=ws.map(r=>r.period);
-  const line=(id,fw,unit)=>{
-    cmpCharts.push(new Chart(document.getElementById(id),{type:'line',
-      data:{labels,datasets:[
-        {label:'Wildberries',data:ws.map(fw),borderColor:WB_COLOR,backgroundColor:WB_COLOR,borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25},
-        {label:'Ozon',data:os.map(fw),borderColor:OZ_COLOR,backgroundColor:OZ_COLOR,borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25,borderDash:[5,3]}]},
-      options:{responsive:true,interaction:{mode:'index',intersect:false},
-        scales:{x:{ticks:{maxRotation:60,minRotation:45,font:{size:8.5}},grid:{display:false}},y:{grid:inkGrid,beginAtZero:unit!=='%',ticks:{callback:v=>unit==='%'?v+'%':fmt0(v)}}},
-        plugins:{legend:{position:'top',align:'end',labels:{boxWidth:10,font:{size:10}}},
-          tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${unit==='%'?c.parsed.y.toFixed(1)+'%':fmt0(c.parsed.y)+(unit?' '+unit:'')}`}}}}}));
-  };
+function buildCmpCharts(prefix, ws, os){
+  const labels = ws.map(r=>r.period);
+  const line=(id,fw,unit)=> activeCharts.push(new Chart(document.getElementById(id),{type:'line',
+    data:{labels,datasets:[
+      {label:'Wildberries',data:ws.map(fw),borderColor:WB_COLOR,backgroundColor:WB_COLOR,borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25},
+      {label:'Ozon',data:os.map(fw),borderColor:OZ_COLOR,backgroundColor:OZ_COLOR,borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25,borderDash:[5,3]}]},
+    options:{responsive:true,interaction:{mode:'index',intersect:false},
+      scales:{x:{ticks:xTicks,grid:{display:false}},y:{grid:inkGrid,beginAtZero:unit!=='%',ticks:{callback:v=>unit==='%'?v+'%':fmt0(v)}}},
+      plugins:{legend:{position:'top',align:'end',labels:{boxWidth:10,font:{size:10}}},
+        tooltip:{callbacks:{label:c=> c.parsed.y==null? '' : `${c.dataset.label}: ${unit==='%'?c.parsed.y.toFixed(1)+'%':fmt0(c.parsed.y)+(unit?' '+unit:'')}`}}}}}));
   line(`${prefix}-cmpSales`, r=>r.sales, '₽');
   line(`${prefix}-cmpQty`, r=>r.qty, 'шт');
   line(`${prefix}-cmpMargin`, r=>r.sales? r.profit/r.sales*100 : null, '%');
 }
 
+// ---- Экраны
+function plCardHTML(prefix, cats, unitNote){
+  return `<div class="cmp-card">
+    <div class="cmp-head"><h3>Wildberries vs Ozon · доходы и расходы</h3><div class="card-sub" style="margin:0">суммы за период и % от продаж площадки</div></div>
+    <div class="cmp-wrap">${plHTML(cats, SEL.a, SEL.b, unitNote)}</div>
+    ${cmpChartsHTML(prefix)}
+  </div>`;
+}
 function renderStore(){
   destroyCharts();
+  const {a,b} = SEL;
   const content = document.getElementById('content');
-  content.innerHTML = `
-    <div class="view-title"><h2>Весь магазин</h2><span class="tag store">Store</span></div>
-    <div class="view-sub">Выберите диапазон недель — плашки и таблица ниже пересчитаются под него</div>
-    <div class="period-controls"><div id="storeRange"></div></div>
-    <div id="periodKpis"></div>
-    ${compareHTML('store')}
-    ${chartsHTML('store')}
-    <div class="card" style="padding-bottom:14px; margin-bottom:24px;">
-      <h3 id="periodTableTitle">Категории за период</h3>
-      <div class="card-sub">клик по строке открывает карточку позиции</div>
-      <table id="periodTable">
-        <thead><tr><th>Категория</th><th class="num">Кол-во</th><th class="num">Продажи, ₽</th><th class="num">Прибыль, ₽</th><th class="num">Маржа</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <div class="view-title" style="margin-top:8px;"><h2 style="font-size:17px;">Ключевые расхождения и риски</h2></div>
-    <div class="findings">
-      <div class="finding"><div class="f-title">Две разные маржи за одну неделю</div>
-        <p>«В разрезе» показывает <span class="f-num">−0,92%</span>, «Общие данные» — <span class="f-num">−1,05%</span>. Разница — 588 ₽ хранения, не разнесённого по товарам.</p></div>
-      <div class="finding"><div class="f-title">Обратная логистика вне P&L</div>
-        <p>Лист «Обр лог»: <span class="f-num">11 184,22 ₽</span> расходов на возврат товаров — нигде не вычтены из прибыли.</p></div>
-      <div class="finding"><div class="f-title">Растущая доля возвратов «Доски садху»</div>
-        <p>1,7% → 3,0% → <span class="f-num">3,3%</span> от выручки за последние 3 недели.</p></div>
-      <div class="finding"><div class="f-title">«Антисептик» — 0 продаж 14 недель подряд</div>
-        <p>Раньше маржа доходила до <span class="f-num">45%</span>. Вероятно, нет в наличии.</p></div>
-    </div>
-  `;
-  buildCharts('store', WEEKS);
-  initPeriodRange();
-  buildCompare('store', WB_WEEKS, OZON_WEEKS);
-}
-
-function initPeriodRange(){
-  makeRangePicker(document.getElementById('storeRange'), WEEKS, WEEKS.length-1, WEEKS.length-1, (a,b)=>updatePeriodRange(a,b));
-}
-
-function updatePeriodRange(fromIdx, toIdx){
-  if(fromIdx>toIdx){ [fromIdx,toIdx]=[toIdx,fromIdx]; }
-  const slice = WEEKS.slice(fromIdx, toIdx+1);
-  const sum = (f)=> slice.reduce((s,r)=>s+r[f],0);
-  const sales=sum('sales'), profit=sum('profit'), ads=sum('ads');
-  const margin = sales? profit/sales : 0;
-  const drr = sales? ads/sales : 0;
-  const label = fromIdx===toIdx ? WEEKS[fromIdx].period : `${WEEKS[fromIdx].period} — ${WEEKS[toIdx].period}`;
-
-  document.getElementById('periodKpis').innerHTML = `<div class="kpis">
-    <div class="kpi"><div class="label">Продажи, ₽</div><div class="value num">${fmt0(sales)}</div></div>
-    <div class="kpi"><div class="label">Прибыль, ₽</div><div class="value num">${fmt0(profit)}</div></div>
-    <div class="kpi"><div class="label">Маржа</div><div class="value num">${pct1(margin)}</div></div>
-    <div class="kpi"><div class="label">ДРР</div><div class="value num">${pct1(drr)}</div></div>
-  </div>`;
-  document.getElementById('periodTableTitle').textContent = `Категории — ${label}`;
-
-  const catsInRange = PRODUCTS.order.map(name=>{
-    const rows = PRODUCTS.series[name].slice(fromIdx, toIdx+1);
-    return {
-      name,
-      qty: rows.reduce((s,r)=>s+r.qty,0),
-      sales: rows.reduce((s,r)=>s+r.sales,0),
-      profit: rows.reduce((s,r)=>s+r.profit,0),
-    };
-  }).sort((a,b)=>b.sales-a.sales);
-
-  const tbody = document.querySelector('#periodTable tbody');
-  tbody.innerHTML = catsInRange.map(c=>{
+  const cats = PRODUCTS.order.map(name=>{
+    const t = aggrCats(PRODUCTS, [name], a, b); return {name, ...t};
+  }).sort((x,y)=>y.sales-x.sales);
+  const rowsHTML = cats.map(c=>{
     const margin = c.sales>0 ? c.profit/c.sales : null;
     const rowClass = c.sales===0 ? 'zero' : (c.profit<0 ? 'neg' : 'pos');
     return `<tr class="${rowClass} clickable" data-name="${c.name}">
-      <td>${c.name}</td><td class="num">${c.qty||0}</td><td class="num">${fmt0(c.sales)}</td>
-      <td class="num profit">${fmt0(c.profit)}</td><td class="num">${margin===null?'—':pct1(margin)}</td>
-    </tr>`;
+      <td>${c.name}</td><td class="num">${fmt0(c.qty)}</td><td class="num">${fmt0(c.sales)}</td>
+      <td class="num">${fmt0(c.cogs)}</td><td class="num pct">${c.sales? pct1(c.cogs/c.sales):'—'}</td>
+      <td class="num profit">${fmt0(c.profit)}</td><td class="num">${margin===null?'—':pct1(margin)}</td></tr>`;
   }).join('');
-  tbody.querySelectorAll('tr.clickable').forEach(tr=>{
-    tr.addEventListener('click', ()=> selectItem(tr.dataset.name));
-  });
+  content.innerHTML = `
+    <div class="view-title"><h2>Весь магазин</h2><span class="tag store">Store</span></div>
+    <div class="view-sub">Период: ${periodLabel(a,b)} · ${b-a+1} нед. · ${platformName()}</div>
+    ${kpisHTML(WEEKS, a, b)}
+    ${plCardHTML('store', PRODUCTS.order)}
+    <div class="card" style="padding-bottom:14px; margin-bottom:24px;">
+      <h3>Категории за период — ${platformName()}</h3>
+      <div class="card-sub">клик по строке открывает карточку позиции</div>
+      <div class="cmp-wrap"><table id="periodTable">
+        <thead><tr><th>Категория</th><th class="num">Кол-во</th><th class="num">Продажи, ₽</th><th class="num">Себестоимость, ₽</th><th class="num">% продаж</th><th class="num">Прибыль, ₽</th><th class="num">Маржа</th></tr></thead>
+        <tbody>${rowsHTML}</tbody>
+      </table></div>
+    </div>
+    ${chartsHTML('store', b-a+1)}
+  `;
+  buildCharts('store', WEEKS.slice(a,b+1));
+  buildCmpCharts('store', WB_WEEKS.slice(a,b+1), OZON_WEEKS.slice(a,b+1));
+  bindCogsToggle();
+  content.querySelectorAll('#periodTable tr.clickable').forEach(tr=> tr.addEventListener('click', ()=> selectItem(tr.dataset.name)));
 }
-
 function renderItem(name){
   destroyCharts();
+  const {a,b} = SEL;
   const rows = PRODUCTS.series[name];
   const content = document.getElementById('content');
-  const totalSales = rows.reduce((s,r)=>s+r.sales,0);
   content.innerHTML = `
     <div class="view-title"><h2>${name}</h2><span class="tag item">Позиция</span></div>
-    <div class="view-sub">Продажи за ${rows.length} периодов (${rows[0].period} — ${rows[rows.length-1].period}): ${fmt0(totalSales)} ₽</div>
-    ${renderKPIs(rows)}
-    ${compareHTML('item')}
-    ${chartsHTML('item')}
+    <div class="view-sub">Период: ${periodLabel(a,b)} · ${b-a+1} нед. · ${platformName()}</div>
+    ${kpisHTML(rows, a, b)}
+    ${plCardHTML('item', [name], unitNoteHTML(name))}
+    ${chartsHTML('item', b-a+1)}
   `;
-  buildCharts('item', rows);
-  buildCompare('item', WB_PRODUCTS.series[name], OZON_PRODUCTS.series[name]);
+  buildCharts('item', rows.slice(a,b+1));
+  buildCmpCharts('item', WB_PRODUCTS.series[name].slice(a,b+1), OZON_PRODUCTS.series[name].slice(a,b+1));
+  bindCogsToggle();
 }
-
-let selectedItemName = null;
+function platformName(){ return CURRENT_PLATFORM==='wb' ? 'плашки и графики: Wildberries' : CURRENT_PLATFORM==='ozon' ? 'плашки и графики: Ozon' : 'плашки и графики: обе площадки'; }
+function render(){ if(selectedItemName) renderItem(selectedItemName); else renderStore(); }
 
 function selectItem(name){
   selectedItemName = name;
   document.querySelectorAll('.sb-item').forEach(el=> el.classList.toggle('active', el.dataset.name===name));
   document.querySelector('.sb-store').classList.remove('active');
-  renderItem(name);
-  window.scrollTo({top:0, behavior:'smooth'});
+  render(); window.scrollTo({top:0, behavior:'smooth'});
 }
-
 function selectStore(){
   selectedItemName = null;
   document.querySelectorAll('.sb-item').forEach(el=> el.classList.remove('active'));
   document.querySelector('.sb-store').classList.add('active');
-  renderStore();
-  window.scrollTo({top:0, behavior:'smooth'});
+  render(); window.scrollTo({top:0, behavior:'smooth'});
 }
-
 function buildSidebar(){
   const sbList = document.getElementById('sbList');
-  sbList.innerHTML = PRODUCTS.order.map(name=>{
-    const rows = PRODUCTS.series[name];
-    const total = rows.reduce((s,r)=>s+r.sales,0);
-    return `<div class="sb-item${name===selectedItemName?' active':''}" data-name="${name}">
-      <span>${name}</span><span class="sb-sales">${fmt0(total)}</span>
-    </div>`;
-  }).join('');
-  sbList.querySelectorAll('.sb-item').forEach(el=>{
-    el.addEventListener('click', ()=> selectItem(el.dataset.name));
-  });
+  const {a,b} = SEL;
+  const items = PRODUCTS.order.map(name=>({name, total: PRODUCTS.series[name].slice(a,b+1).reduce((s,r)=>s+r.sales,0)}))
+    .sort((x,y)=>y.total-x.total);
+  sbList.innerHTML = items.map(({name,total})=>`<div class="sb-item${name===selectedItemName?' active':''}" data-name="${name}">
+      <span>${name}</span><span class="sb-sales">${fmt0(total)}</span></div>`).join('');
+  sbList.querySelectorAll('.sb-item').forEach(el=> el.addEventListener('click', ()=> selectItem(el.dataset.name)));
 }
 document.querySelector('.sb-store').addEventListener('click', selectStore);
 
@@ -770,19 +763,19 @@ function setPlatform(p){
   if(p==='wb'){ PRODUCTS = WB_PRODUCTS; WEEKS = WB_WEEKS; }
   else if(p==='ozon'){ PRODUCTS = OZON_PRODUCTS; WEEKS = OZON_WEEKS; }
   else { PRODUCTS = COMBINED_PRODUCTS; WEEKS = COMBINED_WEEKS; }
-  CATS_LATEST = computeCatsLatest(PRODUCTS);
   document.querySelectorAll('.ps-btn').forEach(b=> b.classList.toggle('active', b.dataset.platform===p));
-  buildSidebar();
-  if(selectedItemName){ renderItem(selectedItemName); }
-  else { renderStore(); }
+  buildSidebar(); render();
 }
-document.querySelectorAll('.ps-btn').forEach(btn=>{
-  btn.addEventListener('click', ()=> setPlatform(btn.dataset.platform));
-});
+document.querySelectorAll('.ps-btn').forEach(btn=> btn.addEventListener('click', ()=> setPlatform(btn.dataset.platform)));
 
-// initial view
-buildSidebar();
-renderStore();
+// ---- старт: по умолчанию последний месяц
+(function init(){
+  const B = rpBounds(WB_WEEKS), end = B[B.length-1].e, start = new Date(end); start.setDate(start.getDate()-29);
+  const [a0,b0] = rpSnap(B, start, end);
+  SEL = {a:a0, b:b0};
+  makeRangePicker(document.getElementById('topRange'), WB_WEEKS, a0, b0, (a,b)=>{ SEL={a,b}; buildSidebar(); render(); });
+})();
+
 </script>
 </body>
 </html>
