@@ -168,6 +168,23 @@
   .ps-btn:hover{ background:rgba(232,221,201,0.1); color:var(--sand); }
   .ps-btn.active{ background:var(--sand); color:var(--bark); }
 
+  .cmp-card{ background:#fff; border:1px solid var(--line); padding:16px 18px 18px; margin:0 0 18px; }
+  .cmp-head{ display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .cmp-head h3{ margin:0; font-size:17px; font-weight:400; }
+  .cmp-head .period-controls{ margin:0; }
+  .cmp-table td, .cmp-table th{ padding:7px 10px; }
+  .cmp-table th.wb, .cmp-table th.oz{ color:var(--ink); }
+  .sw{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:-1px; }
+  .sw.wb{ background:#7b3fa0; } .sw.oz{ background:#c9861a; }
+  .cmp-table td.best{ font-weight:700; }
+  .share-bar{ display:flex; height:8px; border-radius:2px; overflow:hidden; background:var(--line); min-width:90px; gap:2px; }
+  .share-bar span{ display:block; height:100%; }
+  .cmp-charts{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:14px; }
+  .cmp-charts h4{ margin:0 0 2px; font-family:Arial,sans-serif; font-size:12px; color:var(--bark); }
+  .cmp-charts .card-sub{ margin-bottom:6px; }
+  .cmp-wrap{ overflow-x:auto; }
+  @media (max-width:880px){ .cmp-charts{ grid-template-columns:1fr; } }
+
   @media (max-width:880px){
     .platform-switch{ position:static; margin-top:14px; display:inline-flex; }
     .app{ grid-template-columns:1fr; }
@@ -287,7 +304,7 @@ Chart.defaults.color = '#5c5346';
 const inkGrid = { color:'#dcd0b6', drawTicks:false };
 
 let activeCharts = [];
-function destroyCharts(){ activeCharts.forEach(c=>c.destroy()); activeCharts = []; }
+function destroyCharts(){ activeCharts.forEach(c=>c.destroy()); activeCharts = []; if(typeof cmpCharts!=='undefined'){ cmpCharts.forEach(c=>c.destroy()); cmpCharts=[]; } }
 
 function deltaHTML(curr, prevVal, isPct){
   const diff = curr - prevVal;
@@ -324,7 +341,7 @@ function chartsHTML(prefix){
   return `<div class="charts-grid">
     <div class="card full">
       <h3>Продажи и прибыль по неделям</h3>
-      <div class="card-sub">31 период, ₽</div>
+      <div class="card-sub">${WEEKS.length} периодов, ₽</div>
       <canvas id="${prefix}-revprofit" height="70"></canvas>
     </div>
     <div class="card">
@@ -420,6 +437,92 @@ function buildCharts(prefix, rows){
   }));
 }
 
+const WB_COLOR='#7b3fa0', OZ_COLOR='#c9861a';
+function compareHTML(prefix){
+  return `<div class="cmp-card" id="${prefix}-cmp">
+    <div class="cmp-head">
+      <h3>Wildberries vs Ozon</h3>
+      <div class="period-controls">
+        <label>С <select id="${prefix}-cmpFrom"></select></label>
+        <label>По <select id="${prefix}-cmpTo"></select></label>
+        <button class="pr-apply" id="${prefix}-cmpApply">Показать</button>
+      </div>
+    </div>
+    <div class="card-sub" id="${prefix}-cmpLabel"></div>
+    <div class="cmp-wrap"><table class="cmp-table" id="${prefix}-cmpTable"></table></div>
+    <div class="cmp-charts">
+      <div><h4>Продажи по неделям</h4><div class="card-sub">₽</div><canvas id="${prefix}-cmpSales" height="190"></canvas></div>
+      <div><h4>Количество по неделям</h4><div class="card-sub">шт</div><canvas id="${prefix}-cmpQty" height="190"></canvas></div>
+      <div><h4>Маржа по неделям</h4><div class="card-sub">% от продаж</div><canvas id="${prefix}-cmpMargin" height="190"></canvas></div>
+    </div>
+  </div>`;
+}
+let cmpCharts=[];
+function buildCompare(prefix, wbRows, ozRows){
+  const fromSel=document.getElementById(`${prefix}-cmpFrom`), toSel=document.getElementById(`${prefix}-cmpTo`);
+  const opts=wbRows.map((w,i)=>`<option value="${i}">${w.period}</option>`).join('');
+  fromSel.innerHTML=opts; toSel.innerHTML=opts;
+  fromSel.value=Math.max(0,wbRows.length-5); toSel.value=wbRows.length-1;
+  const run=()=>updateCompare(prefix, wbRows, ozRows, parseInt(fromSel.value), parseInt(toSel.value));
+  document.getElementById(`${prefix}-cmpApply`).addEventListener('click', run);
+  run();
+}
+function aggr(rows){
+  const s=f=>rows.reduce((a,r)=>a+(r[f]||0),0);
+  return {qty:s('qty'),sales:s('sales'),komis:s('komis'),cogs:s('cogs'),ads:s('ads'),returns:s('returns'),profit:s('profit')};
+}
+function updateCompare(prefix, wbRows, ozRows, a, b){
+  if(a>b) [a,b]=[b,a];
+  const W=aggr(wbRows.slice(a,b+1)), O=aggr(ozRows.slice(a,b+1));
+  const T={}; Object.keys(W).forEach(k=>T[k]=W[k]+O[k]);
+  const label = a===b ? wbRows[a].period : `${wbRows[a].period} — ${wbRows[b].period}`;
+  document.getElementById(`${prefix}-cmpLabel`).textContent = `Период: ${label} · ${b-a+1} нед.`;
+  const div=(x,y)=>y?x/y:null;
+  const P=v=>v===null?'—':pct1(v), R=v=>v===null?'—':fmt0(v);
+  // metric: label, fn, formatter, higherIsBetter (null = no highlight)
+  const M=[
+    ['Продано, шт', x=>x.qty, v=>fmt0(v), null, true],
+    ['Продажи, ₽', x=>x.sales, R, null, true],
+    ['Средний чек, ₽/шт', x=>div(x.sales,x.qty), R, null],
+    ['Комиссия и логистика', x=>div(x.komis,x.sales), P, false],
+    ['Себестоимость', x=>div(x.cogs,x.sales), P, false],
+    ['ДРР (реклама)', x=>div(x.ads,x.sales), P, false],
+    ['Реклама, ₽', x=>x.ads, R, null],
+    ['Прибыль, ₽', x=>x.profit, R, null, true],
+    ['Прибыль на 1 шт, ₽', x=>div(x.profit,x.qty), R, true],
+    ['Маржа', x=>div(x.profit,x.sales), P, true],
+  ];
+  const rows=M.map(([lab,fn,f,hib,share])=>{
+    const w=fn(W), o=fn(O), t=fn(T);
+    let bw='',bo='';
+    if(hib!==null && hib!==undefined && w!==null && o!==null && W.sales && O.sales && Math.abs(w-o)>1e-9){
+      const wbBetter = hib ? w>o : w<o; bw=wbBetter?'best':''; bo=wbBetter?'':'best';
+    }
+    let sh='';
+    if(share){ const tot=(w>0?w:0)+(o>0?o:0); const pw=tot?Math.round((w>0?w:0)/tot*100):0;
+      sh = tot? `<div class="share-bar" title="WB ${pw}% · Ozon ${100-pw}%"><span style="width:${pw}%;background:${WB_COLOR}"></span><span style="width:${100-pw}%;background:${OZ_COLOR}"></span></div><div style="font-size:10.5px;color:var(--muted);margin-top:3px">WB ${pw}% · Ozon ${100-pw}%</div>` : '—'; }
+    return `<tr><td>${lab}</td><td class="num ${bw}">${f(w)}</td><td class="num ${bo}">${f(o)}</td><td class="num">${f(t)}</td><td>${sh}</td></tr>`;
+  }).join('');
+  document.getElementById(`${prefix}-cmpTable`).innerHTML =
+    `<thead><tr><th>Показатель</th><th class="num wb"><span class="sw wb"></span>Wildberries</th><th class="num oz"><span class="sw oz"></span>Ozon</th><th class="num">Итого</th><th>Доля WB / Ozon</th></tr></thead><tbody>${rows}</tbody>`;
+  // charts over selected range
+  cmpCharts.forEach(c=>c.destroy()); cmpCharts=[];
+  const ws=wbRows.slice(a,b+1), os=ozRows.slice(a,b+1), labels=ws.map(r=>r.period);
+  const line=(id,fw,unit)=>{
+    cmpCharts.push(new Chart(document.getElementById(id),{type:'line',
+      data:{labels,datasets:[
+        {label:'Wildberries',data:ws.map(fw),borderColor:WB_COLOR,backgroundColor:WB_COLOR,borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25},
+        {label:'Ozon',data:os.map(fw),borderColor:OZ_COLOR,backgroundColor:OZ_COLOR,borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25,borderDash:[5,3]}]},
+      options:{responsive:true,interaction:{mode:'index',intersect:false},
+        scales:{x:{ticks:{maxRotation:60,minRotation:45,font:{size:8.5}},grid:{display:false}},y:{grid:inkGrid,beginAtZero:unit!=='%',ticks:{callback:v=>unit==='%'?v+'%':fmt0(v)}}},
+        plugins:{legend:{position:'top',align:'end',labels:{boxWidth:10,font:{size:10}}},
+          tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${unit==='%'?c.parsed.y.toFixed(1)+'%':fmt0(c.parsed.y)+(unit?' '+unit:'')}`}}}}}));
+  };
+  line(`${prefix}-cmpSales`, r=>r.sales, '₽');
+  line(`${prefix}-cmpQty`, r=>r.qty, 'шт');
+  line(`${prefix}-cmpMargin`, r=>r.sales? r.profit/r.sales*100 : null, '%');
+}
+
 function renderStore(){
   destroyCharts();
   const content = document.getElementById('content');
@@ -432,6 +535,7 @@ function renderStore(){
       <button class="pr-apply" id="periodApply">Показать</button>
     </div>
     <div id="periodKpis"></div>
+    ${compareHTML('store')}
     ${chartsHTML('store')}
     <div class="card" style="padding-bottom:14px; margin-bottom:24px;">
       <h3 id="periodTableTitle">Категории за период</h3>
@@ -455,6 +559,7 @@ function renderStore(){
   `;
   buildCharts('store', WEEKS);
   initPeriodRange();
+  buildCompare('store', WB_WEEKS, OZON_WEEKS);
 }
 
 function initPeriodRange(){
@@ -518,11 +623,13 @@ function renderItem(name){
   const totalSales = rows.reduce((s,r)=>s+r.sales,0);
   content.innerHTML = `
     <div class="view-title"><h2>${name}</h2><span class="tag item">Позиция</span></div>
-    <div class="view-sub">Продажи за 31 неделю: ${fmt0(totalSales)} ₽</div>
+    <div class="view-sub">Продажи за ${rows.length} периодов (${rows[0].period} — ${rows[rows.length-1].period}): ${fmt0(totalSales)} ₽</div>
     ${renderKPIs(rows)}
+    ${compareHTML('item')}
     ${chartsHTML('item')}
   `;
   buildCharts('item', rows);
+  buildCompare('item', WB_PRODUCTS.series[name], OZON_PRODUCTS.series[name]);
 }
 
 let selectedItemName = null;
