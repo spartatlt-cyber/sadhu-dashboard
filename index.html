@@ -168,6 +168,14 @@
   .ps-btn:hover{ background:rgba(232,221,201,0.1); color:var(--sand); }
   .ps-btn.active{ background:var(--sand); color:var(--bark); }
 
+  .kpis.kpis5{ grid-template-columns:repeat(5,1fr); }
+  .kpi.kpi-net{ background:#f4f1e8; }
+  .kpi .value.negv{ color:var(--rust); }
+  .pl-table tr.oh-head td{ border-top:1px dashed var(--line); }
+  .pl-table tr.net-row td{ background:#f4f1e8; }
+  .pl-table .est{ font-size:10px; font-weight:400; color:var(--rust); border:1px solid var(--rust); border-radius:2px; padding:0 4px; margin-left:6px; }
+  .oh-note{ font-family:Arial,sans-serif; font-size:11px; color:var(--muted); margin-top:10px; line-height:1.5; }
+  @media (max-width:880px){ .kpis.kpis5{ grid-template-columns:repeat(2,1fr); } }
   .topbar{ position:sticky; top:0; z-index:40; display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 34px; margin:0 -34px 18px;
     background:rgba(250,246,238,.96); border-bottom:1px solid var(--line); backdrop-filter:blur(4px); font-family:Arial,sans-serif; }
   .topbar-l{ font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700; }
@@ -519,6 +527,59 @@ function sumRows(rows){
   return t;
 }
 
+
+// ---- Постоянные расходы (сверх себестоимости) — таблица «СВОДНАЯ», помесячно
+const OH_SRC = {"months": ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"], "lines": {"расчет МП": [120000, 120000, 121800, 120000, 120000, 120000, 100000, 100000], "Расчет офис": [187540, 210800, 185800, 185800, 172800, 159800, 173800, 154300], "НДФЛ 13%": [0, 0, 0, 0, 5200, 5200, 5200, 5200], "Для производства сырье и прочее": [9432.77, 16488.13, 60863.54, 6013.2, 12010.64, 5720.56, 14853.77, 144], "оборудование для производства( закупка, ремонт)": [16097, 0, 0, 0, 0, 0, 54000, 600], "Доставка сотрудников": [20309, 30000, 30000, 26309, 15000, 10000, 2000, 5500], "Доставка МП": [69230, 13165, 29350, 17359, 0, 0, 21985, 1525], "Хоз расходы": [2321, 9002.9, 2789, 0, 0, 1576, 1896, 1028], "Канц.расходы": [0, 5500, 0, 0, 0, 0, 0, 0], "Коммунальные": [42510, 0, 91000, 0, 55000, 55000, 50000, 83400], "Аренда  сверх 6.5т.р": [0, 0, 0, 0, 0, 5000, 10000, 10000], "Прочее": [0, 14160, 3500, 0, 0, 0, 0, 0], "пиллеты": [0, 0, 0, 0, 0, 0, 0, 0], "вода": [1600, 2400, 1000, 1200, 2000, 800, 1800, 760], "Юристы": [40000, 110000, 0, 10000, 40000, 100000, 100000, 0], "Мусор": [0, 1000, 0, 1000, 0, 0, 1000, 0], "интернет и 1С": [14826, 14800, 14826, 14800, 14800, 13400, 13420, 13400], "Налоги": [2000000, 1408017.43, 2587329, 126760, 100000, 370000, 1020888, 111481], "Прочая доставка ( Сдэк, ДЛ и т.д.)": [8019, 0, 0, 0, 0, 0, 0, 0], "МП прочие расходы": [2100, 10190, 27390, 25513, 1900, 0, 5000, 4600], "банк комиссия": [2990, 2990, 2990, 5090, 0, 0, 0, 0]}, "share": [0.9896, 0.9903, 0.9764, 0.9841, 0.9862, 0.9909, 0.989, 0.9946], "wb": [5199955.83, 5461778.26, 4019712.62, 2199183.52, 1608525.11, 2740568.79, 3594050.6100000003, 2238340.5700000003], "oz": [2246454, 1732755, 1443128, 1992885, 1681156.76, 1948770, 2037667.56, 1784349]};
+const OH_GROUPS = [
+  ['staff', 'Зарплата офиса и менеджеров МП', 'расчёт МП, расчёт офис, НДФЛ', ['расчет МП','Расчет офис','НДФЛ 13%']],
+  ['place', 'Коммунальные, аренда, отопление', 'коммунальные, аренда сверх 6,5 т.р., пеллеты, вода, мусор', ['Коммунальные','Аренда  сверх 6.5т.р','пиллеты','вода','Мусор']],
+  ['prod',  'Производство вне себестоимости', 'сырьё и прочее для производства, оборудование', ['Для производства сырье и прочее','оборудование для производства( закупка, ремонт)']],
+  ['trans', 'Доставка сотрудников', 'и прочая доставка (СДЭК, ДЛ)', ['Доставка сотрудников','Прочая доставка ( Сдэк, ДЛ и т.д.)']],
+  ['law',   'Юристы', '', ['Юристы']],
+  ['other', 'Связь, 1С, банк и прочее', 'интернет и 1С, банк, хоз., канц., прочие расходы МП', ['интернет и 1С','банк комиссия','Хоз расходы','Канц.расходы','Прочее','МП прочие расходы']],
+];
+const OH_TAX = 'Налоги';
+// помесячные суммы по группам (только доля WB+Ozon в продажах МП)
+const OH_MONTH = {};
+OH_SRC.months.forEach((m,i)=>{
+  const g = {}; OH_GROUPS.forEach(([k,,,items])=> g[k] = items.reduce((s,n)=> s + ((OH_SRC.lines[n]||[])[i]||0), 0) * OH_SRC.share[i]);
+  g.tax = (OH_SRC.lines[OH_TAX][i]||0) * OH_SRC.share[i]; g.est=false; OH_MONTH[m]=g;
+});
+// месяцы без данных — оценка: среднее за последние 3 месяца, без налогов и юристов
+const OH_EST = (()=>{ const last = OH_SRC.months.slice(-3); const g={};
+  OH_GROUPS.forEach(([k])=> g[k] = last.reduce((s,m)=>s+OH_MONTH[m][k],0)/last.length);
+  g.law=0; g.tax=0; g.est=true; return g; })();
+const OH_LAST_MONTH = OH_SRC.months[OH_SRC.months.length-1];
+function ohMonth(d){ const m = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); return OH_MONTH[m] || OH_EST; }
+const OH_WEEK = (()=>{ // разнос по дням
+  return rpBounds(WB_WEEKS).map(({s,e})=>{
+    const g = {tax:0, est:false}; OH_GROUPS.forEach(([k])=> g[k]=0);
+    for(let d=new Date(s); d<=e; d.setDate(d.getDate()+1)){
+      const mm = ohMonth(d), dim = new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+      OH_GROUPS.forEach(([k])=> g[k] += mm[k]/dim); g.tax += mm.tax/dim; if(mm.est) g.est=true;
+    }
+    return g;
+  });
+})();
+// доля категорий cats на площадке P в общих продажах WB+Ozon недели i
+function ohFor(P, cats, a, b){
+  const t = {tax:0, total:0, est:false}; OH_GROUPS.forEach(([k])=> t[k]=0);
+  for(let i=a;i<=b;i++){
+    const all = (WB_WEEKS[i].sales||0) + (OZON_WEEKS[i].sales||0); if(all<=0) continue;
+    const part = cats.reduce((s,c)=> s + (P.series[c][i].sales||0), 0) / all;
+    OH_GROUPS.forEach(([k])=> t[k] += OH_WEEK[i][k]*part); t.tax += OH_WEEK[i].tax*part;
+    if(OH_WEEK[i].est) t.est = true;
+  }
+  t.total = OH_GROUPS.reduce((s,[k])=> s+t[k], 0);
+  return t;
+}
+function platformsNow(){ return CURRENT_PLATFORM==='wb' ? [WB_PRODUCTS] : CURRENT_PLATFORM==='ozon' ? [OZON_PRODUCTS] : [WB_PRODUCTS, OZON_PRODUCTS]; }
+function netNow(cats, a, b){
+  let profit=0, oh=0, tax=0;
+  platformsNow().forEach(P=>{ const x=aggrCats(P,cats,a,b), o=ohFor(P,cats,a,b); profit+=x.profit; oh+=o.total; tax+=o.tax; });
+  return {profit, oh, tax, net: profit-oh-tax};
+}
+
 // ---- KPI за период + сравнение с предыдущим отрезком той же длины
 function deltaHTML(curr, prevVal, isPct){
   const diff = curr - prevVal;
@@ -529,23 +590,26 @@ function deltaHTML(curr, prevVal, isPct){
                      : (pctChange>=0?'+':'') + pctChange.toFixed(1) + '%';
   return `<span class="delta ${cls}">${arrow} ${text}</span>`;
 }
-function kpisHTML(rows, a, b){
+function kpisHTML(rows, a, b, cats){
   const cur = sumRows(rows.slice(a,b+1));
   const len = b-a+1, pa = a-len, pb = a-1;
   const prev = pa>=0 ? sumRows(rows.slice(pa,pb+1)) : null;
   const m = x=> x.sales? x.profit/x.sales : 0, d = x=> x.sales? x.ads/x.sales : 0;
+  const nc = netNow(cats, a, b), np = prev ? netNow(cats, pa, pb) : null;
   const cmpNote = prev ? `<div class="kpi-note">к предыдущим ${len} нед. (${periodLabel(pa,pb)})</div>` : '';
   const k = [
     ['Продажи, ₽', fmt0(cur.sales), prev? deltaHTML(cur.sales, prev.sales,false):''],
-    ['Прибыль, ₽', fmt0(cur.profit), prev? deltaHTML(cur.profit, prev.profit,false):''],
+    ['Маржинальная прибыль, ₽', fmt0(cur.profit), prev? deltaHTML(cur.profit, prev.profit,false):''],
     ['Маржа', pct1(m(cur)), prev? deltaHTML(m(cur), m(prev), true):''],
     ['ДРР (реклама/продажи)', pct1(d(cur)), prev? deltaHTML(d(cur), d(prev), true):''],
+    ['Чистая прибыль, ₽', fmt0(nc.net), `<span class="delta flat">${cur.sales? pct1(nc.net/cur.sales)+' от продаж':''}</span>`],
   ];
-  return `<div class="kpis">${k.map(x=>`<div class="kpi"><div class="label">${x[0]}</div><div class="value num">${x[1]}</div>${x[2]}</div>`).join('')}</div>${cmpNote}`;
+  return `<div class="kpis kpis5">${k.map(x=>`<div class="kpi${x[0].startsWith('Чистая')?' kpi-net':''}"><div class="label">${x[0]}</div><div class="value num${x[1].startsWith('-')||x[1].startsWith('−')?' negv':''}">${x[1]}</div>${x[2]}</div>`).join('')}</div>${cmpNote}`;
 }
 
 // ---- P&L за период: WB / Ozon / Итого, суммой и % от продаж
 let cogsOpen = true;
+let ohOpen = true;
 function plHTML(cats, a, b, unitNote){
   const W = aggrCats(WB_PRODUCTS, cats, a, b), O = aggrCats(OZON_PRODUCTS, cats, a, b);
   const T = {}; Object.keys(W).forEach(k=> T[k] = W[k]+O[k]);
@@ -572,6 +636,23 @@ function plHTML(cats, a, b, unitNote){
       <td class="num">${fmt0(W[k])}</td><td class="num pct">${pc(W[k],W.sales)}</td>
       <td class="num">${fmt0(O[k])}</td><td class="num pct">${pc(O[k],O.sales)}</td>
       <td class="num">${fmt0(T[k])}</td><td class="num pct">${pc(T[k],T.sales)}</td><td class="num pct">${T.cogs? pct1(T[k]/T.cogs)+' с/с':''}</td></tr>`).join('');
+  const OW = ohFor(WB_PRODUCTS, cats, a, b), OO = ohFor(OZON_PRODUCTS, cats, a, b);
+  const OT = {}; Object.keys(OW).forEach(k=> OT[k] = (k==='est') ? (OW.est||OO.est) : OW[k]+OO[k]);
+  const line = (label, w, o, t, cls, hint)=> `<tr class="${cls||''}"><td>${hint? `<span class="sub-l">${label}</span><span class="sub-h">${hint}</span>` : label}</td>
+      <td class="num">${fmt0(w)}</td><td class="num pct">${pc(w,W.sales)}</td>
+      <td class="num">${fmt0(o)}</td><td class="num pct">${pc(o,O.sales)}</td>
+      <td class="num">${fmt0(t)}</td><td class="num pct">${pc(t,T.sales)}</td><td></td></tr>`;
+  const ohSub = OH_GROUPS.filter(([k])=> Math.abs(OT[k])>0.5).map(([k,lab,hint])=> line(lab, OW[k], OO[k], OT[k], 'sub oh-sub'+(ohOpen?'':' hidden'), hint)).join('');
+  const preW=W.profit-OW.total, preO=O.profit-OO.total, preT=T.profit-OT.total;
+  const ohRows = `
+        <tr class="cogs-head oh-head" id="ohToggle"><td><span class="caret">${ohOpen?'▾':'▸'}</span> Постоянные расходы${OT.est?' <span class="est">частично оценка</span>':''}</td>
+          <td class="num">${fmt0(OW.total)}</td><td class="num pct">${pc(OW.total,W.sales)}</td>
+          <td class="num">${fmt0(OO.total)}</td><td class="num pct">${pc(OO.total,O.sales)}</td>
+          <td class="num">${fmt0(OT.total)}</td><td class="num pct">${pc(OT.total,T.sales)}</td><td class="share-lbl">из «СВОДНОЙ»</td></tr>
+        ${ohSub}
+        ${line('Прибыль до налогов', preW, preO, preT, 'strong')}
+        ${line('Налоги (по оплате, вкл. долги прошлых периодов)', OW.tax, OO.tax, OT.tax)}
+        ${line('Чистая прибыль', preW-OW.tax, preO-OO.tax, preT-OT.tax, 'strong profit-row net-row')}`;
   return `
     <table class="pl-table">
       <thead><tr><th>Показатель</th>
@@ -590,13 +671,19 @@ function plHTML(cats, a, b, unitNote){
           <td class="num">${fmt0(T.cogs)}</td><td class="num pct">${pc(T.cogs,T.sales)}</td><td class="share-lbl">доля в с/с ↓</td></tr>
         ${sub}
         ${row('Реклама', 'ads', {best:'low'})}
-        ${row('Прибыль', 'profit', {cls:'strong profit-row', best:'high', share:true})}
-        <tr class="muted-row"><td>Прибыль на 1 шт, ₽</td><td class="num">${perUnit(W)}</td><td></td><td class="num">${perUnit(O)}</td><td></td><td class="num">${perUnit(T)}</td><td></td><td></td></tr>
+        ${row('Маржинальная прибыль', 'profit', {cls:'strong profit-row', best:'high', share:true})}
+        <tr class="muted-row"><td>Маржинальная прибыль на 1 шт, ₽</td><td class="num">${perUnit(W)}</td><td></td><td class="num">${perUnit(O)}</td><td></td><td class="num">${perUnit(T)}</td><td></td><td></td></tr>
+        ${ohRows}
       </tbody>
     </table>
+    <div class="oh-note">Постоянные расходы и налоги — из таблицы «СВОДНАЯ» (помесячно), разнесены по дням недели и по площадкам/категориям пропорционально продажам; берётся только доля WB + Ozon (без Яндекса и ММ). «Доставка МП» не включена — как и в «СВОДНОЙ». ${OT.est?`За месяцы после ${OH_LAST_MONTH.split('-').reverse().join('.')} данных нет — взято среднее за последние 3 месяца без налогов и юристов (оценка).`:''}</div>
     ${unitNote||''}`;
 }
 function bindCogsToggle(){
+  const h = document.getElementById('ohToggle');
+  if(h) h.addEventListener('click', ()=>{ ohOpen=!ohOpen;
+    document.querySelectorAll('.oh-sub').forEach(r=> r.classList.toggle('hidden', !ohOpen));
+    h.querySelector('.caret').textContent = ohOpen?'▾':'▸'; });
   const t = document.getElementById('cogsToggle'); if(!t) return;
   t.addEventListener('click', ()=>{ cogsOpen=!cogsOpen;
     document.querySelectorAll('.cogs-sub').forEach(r=> r.classList.toggle('hidden', !cogsOpen));
@@ -699,7 +786,7 @@ function renderStore(){
   content.innerHTML = `
     <div class="view-title"><h2>Весь магазин</h2><span class="tag store">Store</span></div>
     <div class="view-sub">Период: ${periodLabel(a,b)} · ${b-a+1} нед. · ${platformName()}</div>
-    ${kpisHTML(WEEKS, a, b)}
+    ${kpisHTML(WEEKS, a, b, PRODUCTS.order)}
     ${plCardHTML('store', PRODUCTS.order)}
     <div class="card" style="padding-bottom:14px; margin-bottom:24px;">
       <h3>Категории за период — ${platformName()}</h3>
@@ -724,7 +811,7 @@ function renderItem(name){
   content.innerHTML = `
     <div class="view-title"><h2>${name}</h2><span class="tag item">Позиция</span></div>
     <div class="view-sub">Период: ${periodLabel(a,b)} · ${b-a+1} нед. · ${platformName()}</div>
-    ${kpisHTML(rows, a, b)}
+    ${kpisHTML(rows, a, b, [name])}
     ${plCardHTML('item', [name], unitNoteHTML(name))}
     ${chartsHTML('item', b-a+1)}
   `;
